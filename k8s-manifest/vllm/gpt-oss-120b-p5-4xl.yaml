@@ -1,5 +1,3 @@
-# docker pull vllm/vllm-openai:gptoss
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -31,9 +29,9 @@ spec:
           image: vllm/vllm-openai:gptoss
           command: [ "vllm", "serve" ]
           args:
-          - openai/gpt-oss-20b
+          - openai/gpt-oss-120b
           - --gpu-memory-utilization=0.95
-          - --max-model-len 109792
+          - --max-num-batched-tokens=1024
           ports:
             - name: http
               containerPort: 8000

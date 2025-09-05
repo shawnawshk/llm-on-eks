@@ -22,7 +22,7 @@ spec:
       # priorityClassName: high-priority-100
       nodeSelector:
         # owner: data-engineer
-        node.kubernetes.io/instance-type: p4de.24xlarge
+        node.kubernetes.io/instance-type: p5.4xlarge
       tolerations:
       - key: "nvidia.com/gpu"
         operator: "Exists"
