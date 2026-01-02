@@ -1,38 +1,37 @@
 FROM docker.io/lmsysorg/sglang:v0.5.7
 
-# Install dependencies
+ARG EFA_INSTALLER_VERSION=latest
+ARG AWS_OFI_NCCL_VERSION=aws
+
+# Install dependencies and EFA (minimal - no kernel modules)
 RUN apt-get update && \
     apt-get install -y \
         build-essential \
         git \
         autoconf \
+        pciutils \
+        libhwloc-dev \
+        environment-modules \
+        tcl \
         automake \
         libtool \
-        pkg-config && \
+        pkg-config \
+        pci.ids \
+        tcl-dev \
+        environment-modules || true && \
     rm -rf /var/lib/apt/lists/*
 
-# Install libfabric with EFA support
-RUN cd /tmp && \
-    git clone --depth 1 --branch v1.22.0 https://github.com/ofiwg/libfabric.git && \
-    cd libfabric && \
-    ./autogen.sh && \
-    ./configure --prefix=/opt/amazon/efa --enable-efa=yes && \
-    make -j$(nproc) && \
-    make install && \
-    cd / && rm -rf /tmp/libfabric
+# Install EFA userspace libraries only (no kernel modules)
+RUN cd $HOME \
+    && curl -O https://efa-installer.amazonaws.com/aws-efa-installer-${EFA_INSTALLER_VERSION}.tar.gz \
+    && tar -xf $HOME/aws-efa-installer-${EFA_INSTALLER_VERSION}.tar.gz \
+    && cd aws-efa-installer \
+    && ./efa_installer.sh -y --skip-kmod --skip-limit-conf --no-verify \
+    && rm -rf $HOME/aws-efa-installer
+
+# Create symlink for pod's expected path
+RUN ln -sf /opt/amazon/ofi-nccl /opt/amazon/aws-ofi-nccl
 
 # Set EFA environment variables
-ENV LD_LIBRARY_PATH=/opt/amazon/efa/lib:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/opt/amazon/efa/lib:/opt/amazon/aws-ofi-nccl/lib:$LD_LIBRARY_PATH
 ENV PATH=/opt/amazon/efa/bin:$PATH
-
-# Install AWS OFI NCCL plugin
-RUN cd /tmp && \
-    git clone --depth 1 --branch v1.11.0-aws https://github.com/aws/aws-ofi-nccl.git && \
-    cd aws-ofi-nccl && \
-    ./autogen.sh && \
-    ./configure --with-libfabric=/opt/amazon/efa --with-cuda=/usr/local/cuda && \
-    make -j$(nproc) && \
-    make install && \
-    cd / && rm -rf /tmp/aws-ofi-nccl
-
-ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
