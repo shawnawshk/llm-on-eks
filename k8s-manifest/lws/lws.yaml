@@ -24,8 +24,9 @@ spec:
           image: &common-image docker.io/lmsysorg/sglang:v0.4.7.post1-cu124
           imagePullPolicy: Always
           command: [ "python3", "-m", "sglang.launch_server" ]
-          args: &common-args
+          args:
             # - "--model-path=deepseek-ai/DeepSeek-R1-0528"
+            &common-args
             - "--model-path=deepseek-ai/DeepSeek-R1"
             - "--host=0.0.0.0"
             - "--port=8000"
@@ -37,7 +38,7 @@ spec:
             - "--trust-remote-code"
             - "--enable-nccl-nvls"
             - "--enable-p2p-check"
-            - "--enable-ep-moe"
+            # - "--enable-ep-moe"
             - "--dist-init-addr=$(LWS_LEADER_ADDRESS):20000"
             - "--nnodes=$(LWS_GROUP_SIZE)"
             - "--node-rank=$(LWS_WORKER_INDEX)"
@@ -66,7 +67,8 @@ spec:
               value: "aws-ofi"
             - name: LD_LIBRARY_PATH
               value: "/opt/amazon/aws-ofi-nccl/lib:/opt/amazon/efa/lib:/usr/local/cuda/lib64:/usr/local/lib"
-            - name: SGL_ENABLE_JIT_DEEPGEMM
+            # - name: SGL_ENABLE_JIT_DEEPGEMM
+            - name: SGLANG_ENABLE_JIT_DEEPGEMM
               value: "0"
           ports: &common-ports
             - name: http
