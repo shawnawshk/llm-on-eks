@@ -2,11 +2,6 @@
 
 This directory contains configurations for running SGLang with AWS Elastic Fabric Adapter (EFA) support on P5 instances using Kubernetes LeaderWorkerSet.
 
-## Overview
-
-- **lws-p5.yaml**: Kubernetes LeaderWorkerSet manifest for deploying SGLang with EFA on P5 instances
-- **Dockerfile**: Custom image based on SGLang with EFA libraries installed
-
 ## Prerequisites
 
 - EKS cluster with P5 instances (p5.48xlarge recommended)
@@ -14,146 +9,146 @@ This directory contains configurations for running SGLang with AWS Elastic Fabri
 - LeaderWorkerSet controller installed
 - ECR repository access
 
-## Custom Docker Image
+## Deployment Options
 
-The Dockerfile builds on top of the official SGLang image and adds:
+| Option | Files | Description |
+|--------|-------|-------------|
+| [Standard Deployment](#option-1-standard-deployment) | `Dockerfile`, `lws-p5.yaml` | Basic SGLang with EFA for multi-node tensor parallelism |
+| [PD Disaggregation](#option-2-pd-disaggregation-deployment) | `Dockerfile.pd-disagg`, `lws-p5-pd-disagg.yaml` | Prefill-Decode separation with NIXL for higher throughput |
 
-- **Libfabric v1.22.0** with EFA provider support
-- **AWS OFI NCCL plugin v1.11.0-aws** for GPU-to-GPU communication over EFA
+---
 
-### Building the Image
+## Option 1: Standard Deployment
+
+Demonstrates SGLang running on P5 instances with EFA-enabled multi-node tensor parallelism.
+
+### Docker Image
+
+The `Dockerfile` builds on the official SGLang image and adds:
+- Libfabric v1.22.0 with EFA provider support
+- AWS OFI NCCL plugin v1.11.0-aws for GPU-to-GPU communication over EFA
+
+### Quick Start
+
+1. Build the image:
 
 ```bash
 docker build -t sglang-efa:v0.5.7 .
 ```
 
-### Pushing to ECR
+2. Push to your container registry and update the image in `lws-p5.yaml`
 
-```bash
-# Tag for ECR
-docker tag sglang-efa:v0.5.7 <account-id>.dkr.ecr.<region>.amazonaws.com/sglang-efa-p5:<tag>
-
-# Authenticate
-aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <account-id>.dkr.ecr.<region>.amazonaws.com
-
-# Push
-docker push <account-id>.dkr.ecr.<region>.amazonaws.com/sglang-efa-p5:<tag>
-```
-
-## Deployment
-
-### Deploy LeaderWorkerSet
+3. Deploy:
 
 ```bash
 kubectl apply -f lws-p5.yaml
 ```
 
-### Verify EFA Devices
-
-Check that EFA devices are available in the pods:
+### Verify EFA
 
 ```bash
+# Check EFA devices
 kubectl exec -it <pod-name> -- ls /dev/infiniband/
-```
 
-You should see EFA devices like `uverbs0`, `uverbs1`, etc.
-
-### Check NCCL with EFA
-
-Verify NCCL can use EFA:
-
-```bash
+# Verify NCCL uses EFA
 kubectl exec -it <pod-name> -- bash -c "NCCL_DEBUG=INFO python -c 'import torch; torch.cuda.is_available()'"
 ```
 
-Look for messages indicating EFA/libfabric is being used.
+### Configuration Reference
 
-## Configuration
+#### Key Environment Variables
 
-### Key Settings in lws-p5.yaml
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `FI_PROVIDER` | `efa` | Use EFA provider for libfabric |
+| `FI_EFA_USE_DEVICE_RDMA` | `1` | Enable RDMA for low-latency communication |
+| `NCCL_NET_PLUGIN` | `ofi` | Use OFI (libfabric) plugin for NCCL |
+| `NCCL_P2P_LEVEL` | `NVL` | Enable NVLink for GPU-to-GPU communication |
 
-#### Security Context
-- **privileged: true**: Required for EFA device access and RDMA operations
-- **capabilities**: Added IPC_LOCK, SYS_RESOURCE, SYS_ADMIN for memory locking and resource management
+#### Key SGLang Arguments
 
-#### Resource Limits
-- **vpc.amazonaws.com/efa: 16**: Number of EFA devices per pod (16 for p5.48xlarge with 8 GPUs)
-- **nvidia.com/gpu: 8**: Number of GPUs per pod
+| Argument | Description |
+|----------|-------------|
+| `--tensor-parallel-size=16` | Distribute model across 16 GPUs (2 nodes × 8 GPUs) |
+| `--disable-custom-all-reduce` | Use NCCL for collective operations |
+| `--enable-nccl-nvls` | Enable NVLS (NVLink Switch) for faster communication |
 
-#### Volume Mounts
-- **efa-devices**: Host path mount for `/dev/infiniband` to access EFA devices
-- **shm**: Shared memory volume (500Gi) for inter-process communication
-- **cache-volume**: Persistent storage for model weights
+#### Resource Requirements
 
-#### NCCL Configuration
-- `NCCL_P2P_LEVEL=NVL`: Enable NVLink for GPU-to-GPU communication
-- `NCCL_P2P_DISABLE=0`: Enable peer-to-peer communication
-- `NCCL_SOCKET_IFNAME=eth0`: Network interface for NCCL
+| Resource | Value | Notes |
+|----------|-------|-------|
+| `vpc.amazonaws.com/efa` | 16 | EFA devices per pod (16 for p5.48xlarge) |
+| `nvidia.com/gpu` | 8 | GPUs per pod |
+| Shared memory | 500Gi | For inter-process communication |
 
-#### EFA Configuration
-- `FI_PROVIDER=efa`: Use EFA provider for libfabric
-- `FI_EFA_USE_DEVICE_RDMA=1`: Enable RDMA for low-latency communication
-- `NCCL_NET_PLUGIN=ofi`: Use OFI (libfabric) plugin for NCCL
-- `NCCL_TUNER_PLUGIN=ofi`: Use OFI tuner for optimal performance
+---
 
-#### SGLang Arguments
-- `--tensor-parallel-size=16`: Distribute model across 16 GPUs (2 nodes × 8 GPUs)
-- `--disable-custom-all-reduce`: Use NCCL for collective operations
-- `--enable-nccl-nvls`: Enable NVLS (NVLink Switch) for faster communication
-- `--dist-init-addr=$(LWS_LEADER_ADDRESS):20000`: Distributed training coordination
-- `--nnodes=$(LWS_GROUP_SIZE)`: Number of nodes in the group
-- `--node-rank=$(LWS_WORKER_INDEX)`: Rank of current node
+## Option 2: PD Disaggregation Deployment
 
-### Environment Variables
+Prefill-Decode disaggregation separates compute-intensive prefill and memory-intensive decode phases for better throughput.
+
+For detailed architecture and configuration, see [PD_DISAGGREGATION.md](PD_DISAGGREGATION.md).
+
+### Quick Start
+
+1. Build the Docker image:
+
+```bash
+docker build -f Dockerfile.pd-disagg -t sglang-efa-pd:v0.5.7 .
+```
+
+2. Push to your container registry (e.g., ECR):
+
+```bash
+docker tag sglang-efa-pd:v0.5.7 <account-id>.dkr.ecr.<region>.amazonaws.com/sglang-efa-pd:v0.5.7
+aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <account-id>.dkr.ecr.<region>.amazonaws.com
+docker push <account-id>.dkr.ecr.<region>.amazonaws.com/sglang-efa-pd:v0.5.7
+```
+
+3. Update the image in `lws-p5-pd-disagg.yaml` to match your registry:
 
 ```yaml
-env:
-  # EFA Configuration
-  - name: FI_PROVIDER
-    value: "efa"
-  - name: FI_EFA_USE_DEVICE_RDMA
-    value: "1"
-  - name: NCCL_NET_PLUGIN
-    value: "ofi"
-  - name: NCCL_TUNER_PLUGIN
-    value: "ofi"
-  # NCCL Configuration
-  - name: NCCL_P2P_LEVEL
-    value: "NVL"
-  - name: NCCL_P2P_DISABLE
-    value: "0"
-  - name: NCCL_SOCKET_IFNAME
-    value: "eth0"
+image: <account-id>.dkr.ecr.<region>.amazonaws.com/sglang-efa-pd:v0.5.7
 ```
+
+4. Deploy:
+
+```bash
+kubectl apply -f lws-p5-pd-disagg.yaml
+```
+
+---
 
 ## Troubleshooting
 
 ### EFA Devices Not Found
 
-Ensure the EFA device plugin is running:
-
 ```bash
+# Ensure EFA device plugin is running
 kubectl get ds -n kube-system aws-efa-k8s-device-plugin
 ```
 
 ### NCCL Not Using EFA
 
-Check libfabric installation:
-
 ```bash
+# Check libfabric installation
 kubectl exec -it <pod-name> -- fi_info -p efa
 ```
 
-Should show EFA provider information.
+### NIXL Backend Errors (PD Disaggregation)
 
-### Performance Issues
+```bash
+# Check libfabric EFA provider
+kubectl exec -it <pod-name> -- fi_info -p efa
 
-- Verify all GPUs can see EFA devices
-- Check NCCL_DEBUG logs for warnings
-- Ensure proper network topology configuration
+# Check NIXL logs
+kubectl logs <pod-name> | grep -i "nixl\|backend"
+```
 
 ## References
 
 - [AWS EFA Documentation](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa.html)
 - [SGLang Documentation](https://github.com/sgl-project/sglang)
+- [SGLang PD Disaggregation](https://docs.sglang.io/advanced_features/pd_disaggregation.html)
+- [NIXL GitHub](https://github.com/ai-dynamo/nixl)
 - [LeaderWorkerSet](https://github.com/kubernetes-sigs/lws)
