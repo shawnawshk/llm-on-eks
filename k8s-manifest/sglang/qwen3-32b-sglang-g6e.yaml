@@ -22,7 +22,6 @@ spec:
     spec:
       priorityClassName: high-priority-100
       nodeSelector:
-        owner: data-engineer
         node.kubernetes.io/instance-type: g6e.12xlarge
       tolerations:
       - key: "nvidia.com/gpu"

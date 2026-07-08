@@ -28,7 +28,7 @@ spec:
           effect: "NoSchedule"
         containers:
         - name: sglang-prefill-leader
-          image: &prefill-image 985955614379.dkr.ecr.us-west-2.amazonaws.com/sglang-efa-p5:v0.5.10-nixl
+          image: &prefill-image <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/sglang-efa-p5:v0.5.10-nixl
           imagePullPolicy: Always
           command: [ "python3", "-m", "sglang.launch_server" ]
           args: &prefill-args
@@ -93,7 +93,7 @@ spec:
             - name: shm
               mountPath: /dev/shm
           securityContext: &prefill-security-context
-            privileged: true
+            privileged: true # required ONLY for EFA device access (/dev/infiniband); single-node manifests do not need this
             capabilities:
               add:
               - IPC_LOCK
@@ -193,7 +193,7 @@ spec:
               topologyKey: topology.kubernetes.io/zone
         containers:
         - name: sglang-decode-leader
-          image: &decode-image 985955614379.dkr.ecr.us-west-2.amazonaws.com/sglang-efa-p5:v0.5.10-nixl
+          image: &decode-image <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/sglang-efa-p5:v0.5.10-nixl
           imagePullPolicy: Always
           command: [ "python3", "-m", "sglang.launch_server" ]
           args: &decode-args
@@ -257,7 +257,7 @@ spec:
             - name: shm
               mountPath: /dev/shm
           securityContext: &decode-security-context
-            privileged: true
+            privileged: true # required ONLY for EFA device access (/dev/infiniband); single-node manifests do not need this
             capabilities:
               add:
               - IPC_LOCK
@@ -426,7 +426,7 @@ spec:
           exit 1
       containers:
       - name: router
-        image: 985955614379.dkr.ecr.us-west-2.amazonaws.com/sglang-efa-p5:v0.5.10-nixl
+        image: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/sglang-efa-p5:v0.5.10-nixl
         command: [ "python3", "-m", "sglang_router.launch_router" ]
         env:
         - name: PREFILL_URL

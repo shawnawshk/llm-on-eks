@@ -23,7 +23,6 @@ spec:
     spec:
       priorityClassName: high-priority-100
       nodeSelector:
-        owner: data-engineer
         node.kubernetes.io/instance-type: p5en.48xlarge
       tolerations:
       - key: "nvidia.com/gpu"
@@ -31,7 +30,7 @@ spec:
         effect: "NoSchedule"
       containers:
       - name: llama4-scout
-        image: vllm/vllm-openai:latest
+        image: vllm/vllm-openai:v0.24.0
         command: [ "/bin/sh", "-c" ]
         args: [ "vllm serve unsloth/Llama-4-Scout-17B-16E-Instruct --tensor-parallel-size 8 --max-model-len 1000000 --enforce-eager" ]
         env:

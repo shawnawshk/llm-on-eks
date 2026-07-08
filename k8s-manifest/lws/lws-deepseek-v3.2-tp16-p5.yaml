@@ -21,7 +21,7 @@ spec:
           effect: "NoSchedule"
         containers:
         - name: sglang-leader
-          image: &common-image 985955614379.dkr.ecr.us-west-2.amazonaws.com/sglang-efa-p5:v0.5.7-v4 # build your own image to replace it
+          image: &common-image <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/sglang-efa-p5:v0.5.7-v4 # build your own image to replace it
           imagePullPolicy: Always
           command: [ "python3", "-m", "sglang.launch_server" ]
           args: &common-args
@@ -104,7 +104,7 @@ spec:
             - name: shm
               mountPath: /dev/shm
           securityContext: &common-security-context
-            privileged: true # Important for EFA Devices access
+            privileged: true # required ONLY for EFA device access (/dev/infiniband); single-node manifests do not need this
             capabilities:
               add:
               - IPC_LOCK

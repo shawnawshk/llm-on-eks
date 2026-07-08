@@ -22,7 +22,6 @@ spec:
     spec:
       priorityClassName: high-priority-100
       nodeSelector:
-        # owner: data-engineer
         node.kubernetes.io/instance-type: p5en.48xlarge
       tolerations:
       - key: "nvidia.com/gpu"
@@ -46,6 +45,11 @@ spec:
         - --mem-fraction-static=0.80
         # FP8 KV cache ~halves KV bytes/token -> ~2x KV pool -> more concurrent prefill
         - --kv-cache-dtype=fp8_e4m3
+        # HiCache: spill evicted KV to host RAM (~2TB on p5en); repeated prefixes
+        # reload over PCIe instead of re-running prefill
+        - --enable-hierarchical-cache
+        - --hicache-ratio=2
+        - --hicache-write-policy=write_through
         # default 2048 leaves 8K-input workloads prefill-bound (TTFT dominated by
         # queueing); 32768 measured +34~78% throughput, -39~59% TTFT on 8xH200
         - --chunked-prefill-size=32768

@@ -66,7 +66,7 @@ Benchmarked head-to-head in [GLM-5.2-BENCHMARK.md](GLM-5.2-BENCHMARK.md).
 
 | Purpose | File |
 |---|---|
-| Karpenter GPU/Neuron nodepools | `../nodepool.yaml` |
+| Karpenter GPU nodepool | `../nodepool.yaml` |
 | Priority class | `priority-class.yaml` |
 | genai-perf client pod (Triton 26.06 SDK) | `genai-perf/genai-perf-triton-2606.yaml` |
 | Chat UI | `../open-webui.yaml` |

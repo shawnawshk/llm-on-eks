@@ -1,5 +1,5 @@
 # GLM-5.2-FP8 on 2x p5en.48xlarge (16x H200), TP=16 across nodes via EFA.
-# Sized for the 2-instance Capacity Block cr-01ea295ebb342a0f0 (us-west-2d);
+# Sized for 2x p5en.48xlarge (e.g. reserved via EC2 Capacity Blocks / ODCR);
 # the reserved-capacity-pool provisions both nodes from it.
 #
 # IMAGE PREREQUISITE: GLM-5.2 requires SGLang >= v0.5.13.post1, but the existing
@@ -30,7 +30,7 @@ spec:
           effect: "NoSchedule"
         containers:
         - name: sglang-leader
-          image: &common-image 985955614379.dkr.ecr.us-west-2.amazonaws.com/sglang-efa-p5:v0.5.13.post1-nixl # EFA 1.49 + aws-ofi-nccl + NIXL 0.10.1 (LIBFABRIC backend)
+          image: &common-image <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/sglang-efa-p5:v0.5.13.post1-nixl # EFA 1.49 + aws-ofi-nccl + NIXL 0.10.1 (LIBFABRIC backend)
           imagePullPolicy: Always
           command: [ "python3", "-m", "sglang.launch_server" ]
           args: &common-args
@@ -128,7 +128,7 @@ spec:
             - name: shm
               mountPath: /dev/shm
           securityContext: &common-security-context
-            privileged: true # Important for EFA Devices access
+            privileged: true # required ONLY for EFA device access (/dev/infiniband); single-node manifests do not need this
             capabilities:
               add:
               - IPC_LOCK

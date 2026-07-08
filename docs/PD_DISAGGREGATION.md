@@ -335,8 +335,8 @@ docker build -t sglang-efa:latest .
 docker build --build-arg EFA_INSTALLER_VERSION=1.46.0 -t sglang-efa:v1.46 .
 
 # Push to ECR
-docker tag sglang-efa:latest 985955614379.dkr.ecr.us-west-2.amazonaws.com/sglang-efa-p5:v0.5.7-nixl
-docker push 985955614379.dkr.ecr.us-west-2.amazonaws.com/sglang-efa-p5:v0.5.7-nixl
+docker tag sglang-efa:latest <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/sglang-efa-p5:v0.5.7-nixl
+docker push <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/sglang-efa-p5:v0.5.7-nixl
 ```
 
 **Important Notes:**

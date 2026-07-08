@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: deepseek-llama-8b-sglang
-  namespace: deepseek
   labels:
     app: deepseek-llama-8b
     engine: sglang
@@ -23,14 +22,13 @@ spec:
     spec:
       priorityClassName: high-priority-100
       nodeSelector:
-        owner: data-engineer
       tolerations:
       - key: "nvidia.com/gpu"
         operator: "Exists"
         effect: "NoSchedule"
       containers:
       - name: deepsek
-        image: docker.io/lmsysorg/sglang:latest
+        image: docker.io/lmsysorg/sglang:v0.5.13.post1
         imagePullPolicy: Always # IfNotPresent or Never
         command: [ "python3", "-m", "sglang.launch_server" ]
         args: [ "--model", "deepseek-ai/DeepSeek-R1-Distill-Llama-8B", "--host", "0.0.0.0", "--port", "8000" ]

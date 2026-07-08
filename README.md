@@ -1,18 +1,26 @@
-# LLM on EKS
+# LLM Inference on Amazon EKS with NVIDIA GPUs
 
-Working examples for serving open-weight LLMs on Amazon EKS — from single-GPU
-deployments to multi-node tensor parallelism over EFA and prefill/decode
-disaggregation. Manifests are organized by serving stack; models covered include
-GLM-5.2 (753B MoE), DeepSeek-R1/V3.2, the R1 distills, Qwen, gpt-oss, and Llama 4.
+Working examples for serving open-weight LLMs on Amazon EKS with NVIDIA GPU
+instances — from single-GPU deployments to multi-node tensor parallelism over
+EFA and prefill/decode disaggregation. Manifests are organized by serving stack;
+models covered include GLM-5.2 (753B MoE), DeepSeek-R1/V3.2, the R1 distills,
+Qwen, gpt-oss, and Llama 4.
 
 **Looking for a specific model?** See [docs/MODEL-INDEX.md](docs/MODEL-INDEX.md)
 — the by-model view of every manifest, with instance types and maintenance status.
+
+> **💰 Cost warning**: the examples target real GPU capacity. Entry-level
+> manifests run on a single g6e instance (a few $/hour), but the flagship
+> examples use `p5en.48xlarge` (8× H200) — **tens of dollars per hour per node**,
+> and the multi-node examples use two. Karpenter provisions nodes as soon as you
+> apply a manifest and consolidates them after you delete it — see
+> [Cleanup](#cleanup) and verify nothing is left running.
 
 ## Repository Layout
 
 ```
 .
-├── nodepool.yaml               # Karpenter NodePools (GPU + Neuron)
+├── nodepool.yaml               # Karpenter NodePool (NVIDIA GPU instances)
 ├── open-webui.yaml             # Optional chat UI (point OPENAI_API_BASE_URLS at any model Service)
 ├── docs/
 │   ├── MODEL-INDEX.md          # By-model index of all manifests
@@ -36,6 +44,28 @@ GLM-5.2 (753B MoE), DeepSeek-R1/V3.2, the R1 distills, Qwen, gpt-oss, and Llama 
 | **Multi-node TP** (`lws/lws-*-tp16-*.yaml`) | Model too big for one node, or hard TTFT SLO at high concurrency | `lws/lws-glm-5.2-tp16-p5en.yaml` — TP16 across 2 nodes via EFA |
 | **PD disaggregation** (`lws/lws-*-pd-*.yaml`) | Strict ITL SLO or decode-heavy traffic; prefill and decode scale independently | `lws/lws-glm-5.2-pd-p5en.yaml` — NIXL KV transfer over EFA RDMA + sglang-router |
 
+```mermaid
+flowchart LR
+    C[Client] --> S1[Service]
+    C --> S2[Service]
+    C --> R[sglang-router]
+
+    subgraph single ["Single-node (sglang/, vllm/)"]
+        S1 --> P1["1 node, TP8<br/>8x GPU"]
+    end
+
+    subgraph tp ["Multi-node TP (lws/*-tp16-*)"]
+        S2 --> L["leader (rank 0)"]
+        L <-. "NCCL over EFA RDMA" .-> W["worker (rank 1)"]
+    end
+
+    subgraph pd ["PD disaggregation (lws/*-pd-*)"]
+        R --> PF["prefill node, TP8"]
+        R --> DC["decode node, TP8"]
+        PF -- "KV cache via NIXL/EFA" --> DC
+    end
+```
+
 Head-to-head numbers for all three shapes on the same hardware:
 [docs/GLM-5.2-BENCHMARK.md](docs/GLM-5.2-BENCHMARK.md).
 
@@ -50,7 +80,23 @@ Head-to-head numbers for all three shapes on the same hardware:
   - An EFA-enabled image — build from `k8s-manifest/lws/Dockerfile.efa-*`
     and push to your registry (see [k8s-manifest/lws/README.md](k8s-manifest/lws/README.md))
 - Models are pulled from HuggingFace on first start and cached on node-local
-  NVMe (`hostPath`); large models (750 GB+) take a while on the first pod start
+  NVMe via `hostPath: /mnt/k8s-disks/0/...` — this path assumes the EKS
+  GPU-optimized AMI's instance-store RAID setup. If your nodes mount NVMe
+  elsewhere (or have none), adjust the `hostPath` in the manifest or switch the
+  cache volume to EBS/FSx. Large models (750 GB+) take a while on first start.
+- All example models are openly downloadable. For gated HuggingFace models,
+  create a Secret and inject it as `HF_TOKEN`:
+
+  ```bash
+  kubectl create secret generic hf-token --from-literal=token=hf_xxx
+  ```
+
+  then add to the container env:
+
+  ```yaml
+  - name: HF_TOKEN
+    valueFrom: { secretKeyRef: { name: hf-token, key: token } }
+  ```
 
 ## Quick Start (single-node example)
 
@@ -96,6 +142,29 @@ Condensed from the benchmark writeups — details in [docs/](docs/):
   decode idles.
 - **Reasoning models need thinking disabled for clean benchmarks** — nested
   `chat_template_kwargs.enable_thinking:false`, not a flat key.
+
+## Cleanup
+
+Delete what you deployed; Karpenter consolidates the empty GPU nodes
+automatically (see `disruption` in `nodepool.yaml`):
+
+```bash
+# the model(s) you deployed
+kubectl delete -f k8s-manifest/sglang/glm-5.2-fp8-p5en.yaml
+# any LWS deployments
+kubectl delete -f k8s-manifest/lws/lws-glm-5.2-tp16-p5en.yaml
+# optional components
+kubectl delete -f k8s-manifest/genai-perf/genai-perf-triton-2606.yaml
+kubectl delete -f open-webui.yaml
+
+# verify no GPU nodes remain (may take a few minutes to consolidate)
+kubectl get nodeclaims
+kubectl get nodes -l karpenter.sh/nodepool=gpu-nodepool
+```
+
+If you created an ECR repository for the EFA images or an S3/FSx model cache,
+remove those separately. Nodes reserved via Capacity Blocks/ODCR bill per the
+reservation regardless of usage — release or let them expire.
 
 ## Conventions
 

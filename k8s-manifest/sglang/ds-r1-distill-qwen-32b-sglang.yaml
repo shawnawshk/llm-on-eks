@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: deepseek-qwen-32b-sglang
-  namespace: deepseek
   labels:
     app: deepseek-qwen-32b
     engine: sglang
@@ -23,7 +22,6 @@ spec:
     spec:
       priorityClassName: high-priority-100
       nodeSelector:
-        owner: data-engineer
         node.kubernetes.io/instance-type: g6e.12xlarge
       tolerations:
       - key: "nvidia.com/gpu"
@@ -31,7 +29,7 @@ spec:
         effect: "NoSchedule"
       containers:
       - name: deepsek
-        image: docker.io/lmsysorg/sglang:latest
+        image: docker.io/lmsysorg/sglang:v0.5.13.post1
         imagePullPolicy: Always # IfNotPresent or Never
         command: [ "python3", "-m", "sglang.launch_server" ]
         args: [ "--model", "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", "--trust-remote-code", "--tp", "2", "--host", "0.0.0.0", "--port", "8000", "--disable-custom-all-reduce" ]

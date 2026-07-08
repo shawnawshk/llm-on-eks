@@ -47,6 +47,10 @@ spec:
         - --kv-cache-dtype=fp8
         # vLLM default 0.9 OOM-crashed sglang's equivalent under load; stay at 0.85
         - --gpu-memory-utilization=0.85
+        # KV offload to host RAM — vLLM's HiCache equivalent. 400GiB total across
+        # TP ranks (~50GiB/rank), comparable to sglang hicache-ratio=2
+        - --kv-offloading-size=400
+        - --kv-offloading-backend=native
         # MTP speculative decoding, per recipe (sglang uses EAGLE over the same MTP head)
         - --speculative-config={"method":"mtp","num_speculative_tokens":5}
         # thinking / tool-call parsing (same parsers as sglang)

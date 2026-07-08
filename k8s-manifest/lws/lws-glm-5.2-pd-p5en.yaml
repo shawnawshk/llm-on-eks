@@ -1,4 +1,4 @@
-# GLM-5.2-FP8 PD-disaggregation on 2x p5en.48xlarge (CB cr-01ea295ebb342a0f0):
+# GLM-5.2-FP8 PD-disaggregation on 2x p5en.48xlarge (2x p5en.48xlarge):
 #   prefill: 1 node tp=8 (port 30000)  |  decode: 1 node tp=8 (port 30001)
 #   KV-cache transfer prefill->decode via NIXL LIBFABRIC backend over EFA RDMA
 #   router: sglang_router with --pd-disaggregation fronting both (port 8000)
@@ -36,7 +36,7 @@ spec:
           effect: "NoSchedule"
         containers:
         - name: sglang-prefill-leader
-          image: &prefill-image 985955614379.dkr.ecr.us-west-2.amazonaws.com/sglang-efa-p5:v0.5.13.post1-efa
+          image: &prefill-image <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/sglang-efa-p5:v0.5.13.post1-efa
           imagePullPolicy: Always
           command: [ "python3", "-m", "sglang.launch_server" ]
           args: &prefill-args
@@ -113,7 +113,7 @@ spec:
             - name: shm
               mountPath: /dev/shm
           securityContext: &prefill-security-context
-            privileged: true
+            privileged: true # required ONLY for EFA device access (/dev/infiniband); single-node manifests do not need this
             capabilities:
               add:
               - IPC_LOCK
@@ -210,7 +210,7 @@ spec:
               topologyKey: topology.kubernetes.io/zone
         containers:
         - name: sglang-decode-leader
-          image: &decode-image 985955614379.dkr.ecr.us-west-2.amazonaws.com/sglang-efa-p5:v0.5.13.post1-efa
+          image: &decode-image <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/sglang-efa-p5:v0.5.13.post1-efa
           imagePullPolicy: Always
           command: [ "python3", "-m", "sglang.launch_server" ]
           args: &decode-args
@@ -274,7 +274,7 @@ spec:
             - name: shm
               mountPath: /dev/shm
           securityContext: &decode-security-context
-            privileged: true
+            privileged: true # required ONLY for EFA device access (/dev/infiniband); single-node manifests do not need this
             capabilities:
               add:
               - IPC_LOCK
@@ -443,7 +443,7 @@ spec:
           exit 1
       containers:
       - name: router
-        image: 985955614379.dkr.ecr.us-west-2.amazonaws.com/sglang-efa-p5:v0.5.13.post1-efa
+        image: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/sglang-efa-p5:v0.5.13.post1-efa
         command: [ "python3", "-m", "sglang_router.launch_router" ]
         env:
         - name: PREFILL_URL

@@ -15,7 +15,7 @@
 #
 # Build (Apple Silicon -> amd64):
 #   docker buildx build --platform linux/amd64 -f Dockerfile.efa-sglang-0513 \
-#     -t 985955614379.dkr.ecr.us-west-2.amazonaws.com/sglang-efa-p5:v0.5.13.post1-efa --push .
+#     -t <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/sglang-efa-p5:v0.5.13.post1-efa --push .
 
 FROM docker.io/lmsysorg/sglang:v0.5.13.post1
 
