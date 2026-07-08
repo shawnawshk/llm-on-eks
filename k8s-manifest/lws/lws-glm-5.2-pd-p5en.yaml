@@ -61,6 +61,13 @@ spec:
             - --node-rank=$(LWS_WORKER_INDEX)
             - --disaggregation-mode=prefill
             - --disaggregation-transfer-backend=nixl
+            # HiCache: offload evicted KV to host RAM (node has ~2TB; GPU KV pool
+            # ~0.5GB/GPU at fp8). ratio=2 => host pool 2x device pool. Repeated
+            # prefixes (system prompts / multi-turn) reload over PCIe instead of
+            # recomputing prefill.
+            - --enable-hierarchical-cache
+            - --hicache-ratio=2
+            - --hicache-write-policy=write_through
           env: &prefill-env
             - name: LWS_WORKER_INDEX
               valueFrom:

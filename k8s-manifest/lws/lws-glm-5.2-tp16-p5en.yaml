@@ -57,7 +57,7 @@ spec:
             # thinking / tool-call parsing (GLM-5.2 needs glm47 for tool calls)
             - --reasoning-parser=glm45
             - --tool-call-parser=glm47
-            # multi-node settings (same as lws-p5.yaml)
+            # multi-node settings (same as lws-deepseek-v3.2-tp16-p5.yaml)
             - --disable-custom-all-reduce
             - --enable-nccl-nvls
             - --enable-p2p-check

@@ -29,9 +29,13 @@ spec:
             cpu: "1000m"
             memory: "1Gi"
         env:
-        # This is the vllm k8s service URL to which Open-WebUI client connects to.
+        # CHANGE ME: point at your model's k8s Service (any OpenAI-compatible
+        # endpoint from this repo). This Deployment runs in the `deepseek`
+        # namespace, so use the FQDN for Services in other namespaces, e.g.:
+        #   http://glm-5-2.default.svc.cluster.local/v1
+        # Multiple backends can be semicolon-separated.
         - name: OPENAI_API_BASE_URLS
-          value: "http://deepseek-svc-qwen-32b/v1"
+          value: "http://glm-5-2.default.svc.cluster.local/v1"
         - name: OPENAI_API_KEY
           value: "dummy" # Replace with actual API key if required
         volumeMounts:
