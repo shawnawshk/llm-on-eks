@@ -98,11 +98,64 @@ GLM-5.2 requires SGLang ≥ v0.5.13.post1 (`glm_moe_dsa` arch) and transformers 
 | TP16 OOM under load | c20 benchmark, ~4 min in | 0.85 static pool absorbs TP16 weight savings into KV | mem 0.80 |
 | genai-perf c40 failures ×2 | router streaming at c40 | genai-perf 0.0.16 SSE parser (`splintered SSE`, `orjson` error); backends healthy | use `sglang.bench_serving` |
 
+## KV-cache offloading (HiCache / vLLM OffloadingConnector) — 2026-07-08
+
+Follow-up experiments on host-RAM KV offload, run on the same two CB nodes before expiry.
+Scenario: **long-document reuse** — N users × ~30K-token documents, re-asked after the GPU
+KV pool has been flooded/evicted. `max_tokens=1` isolates prefill (≈TTFT). All fp8 KV.
+
+### On PD-disaggregation (prefill side, HiCache ratio=2)
+
+| Test | Result |
+|---|---|
+| Single request, hot vs cold | TTFT 1.78s vs 2.61s (**-32%**), log-verified `#cached-token: 10240` |
+| Concurrency 20, hot vs cold | **no gain** (~4%), even with 100% host-cache hit |
+| Same test with bf16 KV (JIT HiCache kernel healthy) | still no gain → JIT fallback ruled out |
+
+**Why**: offload accelerates *prefill compute* only; in PD every request still pays the
+P→D KV transfer + bootstrap handshake, which dominates at high concurrency with
+`max_tokens=1`. bf16 cold rounds ran ~50% slower than fp8 (51s vs 33s wall) — the
+KV-transfer volume is a first-order cost in PD, so **fp8 KV is doubly valuable there**.
+
+### On single-node TP8 (the shape where offload pays off)
+
+8 users × 30K-token docs, concurrency 8, flood sized to evict GPU but **fit in host pool**:
+
+| Engine | Offload config | Cold TTFT avg | Hot TTFT avg | Speedup | Hit evidence |
+|---|---|---|---|---|---|
+| SGLang v0.5.13 | HiCache `ratio=2` (~330GB host) | 17.9s | **2.2s** | **8.1×** (wall 10.4×) | `#cached-token: 245K` = 100% reload |
+| vLLM v0.24 | native `--kv-offloading-size=400` | 17.6s | 14.8s | 1.14× | `prefix cache hit rate: 2.5%` |
+
+Cold prefill performance is equal between engines; the offload implementations are not:
+**SGLang HiCache delivers ~8-10×; vLLM's native OffloadingConnector barely hits** (with
+fp8-KV + MTP at least). vLLM's documented path for serious offload is
+`--kv-offloading-backend=lmcache` — untested here (image lacks lmcache).
+
+### Sizing rule (validated the hard way)
+
+Offload benefit is binary on capacity: **working set ≤ host pool → ~10×; overflow → zero**.
+An earlier run flooded 720K tokens into an 805K-token host pool alongside a 240K working
+set — the working set was LRU-evicted from host too, and the hot round showed no benefit
+(`#cached-token: 0` across the board). Size `hicache-ratio` / `kv-offloading-size` from
+*active users × context length*; p5en has ~2TB RAM, so ratio 4–6 is realistic.
+
+### Operational notes
+
+- sglang-router circuit-breaker does **not** auto-recover after a prefill restart —
+  restart the router deployment (`kubectl rollout restart deploy/<router>`).
+- fp8 KV triggers `Unsupported element_size = 656 for JIT HiCache kernel` (generic-path
+  fallback for host↔device copies). Benefit was still 8× despite it; bf16 avoids the
+  warning but halves both KV pools — keep fp8.
+- Manifests carry the offload flags: `sglang/glm-5.2-fp8-p5en.yaml` (HiCache),
+  `vllm/glm-5.2-fp8-p5en-vllm.yaml` (native offload; swap backend to `lmcache` for round B).
+
 ## Open items
 
 1. **2× TP8 replicas at c40** — the throughput-per-dollar favorite is extrapolated (456 × 2 ≈ 912 tok/s), not measured. Requires freeing the PD nodes and scaling `glm-5-2` to `replicas: 2`.
 2. PD at 2P:1D ratio (3 nodes) if a decode-pure + low-TTFT profile is ever required.
 3. MTP acceptance-length telemetry was not collected; draft-token tuning was done on cookbook guidance, not measured accept rates.
+4. **LMCache (round B)**: vLLM `--kv-offloading-backend=lmcache` (image needs `pip install lmcache`), sglang `--enable-lmcache`; and the architectural variant worth testing for PD — decode reading from a shared KV store (Mooncake) instead of per-request P→D push.
+5. HiCache `ratio=4–6` on p5en (2TB RAM) for larger working sets; and `hicache-storage-backend` (L3: file/mooncake/nixl) for cross-restart persistence.
 
 ## Reproduce
 
